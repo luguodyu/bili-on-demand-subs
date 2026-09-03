@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { width: 250px; font-family: "Microsoft YaHei", sans-serif; padding: 12px; }
+    h3 { margin: 0 0 8px; font-size: 15px; }
+    #status { font-size: 12px; color: #666; margin-bottom: 10px; min-height: 14px; line-height: 1.5; }
+    button {
+      width: 100%; padding: 8px; margin-bottom: 6px;
+      border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
+    }
+    #lib { background: #00a1d6; color: #fff; }
+    .hint { font-size: 11px; color: #999; margin-top: 8px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <h3>🎬 B站按需字幕</h3>
+  <div id="status">加载中…</div>
+  <button id="lib">📚 打开字幕库</button>
+  <div class="hint">
+    使用：打开没有字幕的B站视频 → 页面左下角点「字幕」胶囊 → 生成字幕。<br>
+    生成后播放时会自动同步显示；字幕保存在浏览器本地，重启不丢。
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

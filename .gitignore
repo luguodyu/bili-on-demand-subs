@@ -1,0 +1,17 @@
+# 模型缓存（约500MB，不入库）
+hf-cache/
+
+# Python
+__pycache__/
+*.pyc
+
+# 测试音频片段（可用 ffmpeg 重新生成）
+clip*.wav
+
+# 系统文件
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.dsh-uploads/
