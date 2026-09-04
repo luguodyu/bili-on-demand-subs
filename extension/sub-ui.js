@@ -20,6 +20,74 @@
 
   let pillEl = null, panelEl = null, overlayEl = null;
 
+  // ================= 全屏自动隐藏（网页全屏 / 电脑全屏） =================
+  S.lastActive = Date.now(); // 最近一次用户活动时间
+  S.lastX = -1; S.lastY = -1; // 上一次指针坐标（用于识别“原地重复”的伪移动事件）
+  const FS_HIDE_MS = 800;     // 全屏下静置多久隐藏（越快越好；鼠标真实移动会重置）
+
+  // 全屏判定：Fullscreen API（电脑全屏/播放器全屏）或 B站「网页全屏」的 fixed 全屏容器
+  function inAnyFullscreen() {
+    try { if (document.fullscreenElement) return true; } catch (e) {}
+    try {
+      for (const s of ['.bpx-player-container', '.bpx-player-wrap']) {
+        const p = document.querySelector(s);
+        if (p && getComputedStyle(p).position === 'fixed') return true;
+      }
+      // 兜底：正在播放的 <video> 的 fixed 祖先覆盖近全屏 → 视为网页全屏
+      const v = document.querySelector('video');
+      if (v) {
+        let el = v.parentElement;
+        while (el && el !== document.body) {
+          const cs = getComputedStyle(el);
+          if (cs.position === 'fixed') {
+            const r = el.getBoundingClientRect();
+            if (r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9) return true;
+          }
+          el = el.parentElement;
+        }
+      }
+    } catch (e) {}
+    return false;
+  }
+  // 任一“可见且正在播放”的视频都算播放中（B站全屏时页面可能残留隐藏的旧 <video>）
+  function anyPlaying() {
+    for (const v of document.querySelectorAll('video')) {
+      try {
+        if (v.paused || v.ended || v.readyState < 2) continue;
+        const r = v.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) continue;
+        const s = getComputedStyle(v);
+        if (s.display === 'none' || s.visibility === 'hidden') continue;
+      } catch (e) { continue; }
+      return true;
+    }
+    return false;
+  }
+  // 仅隐藏角标与操作面板；字幕同步文本（overlayEl）永不参与
+  function setAutohide() {
+    if (!pillEl) return;
+    const fs = inAnyFullscreen();
+    if (document.documentElement) document.documentElement.classList.toggle('bili-sub-fs', fs);
+    const hide = !S.busy && BiliSubs.controlsAutoHide({
+      playing: anyPlaying(),
+      inFullscreen: fs,
+      idleMs: Date.now() - S.lastActive,
+      thresholdMs: FS_HIDE_MS
+    });
+    pillEl.classList.toggle('bili-sub-hidden', hide);
+    if (panelEl) panelEl.classList.toggle('bili-sub-hidden', hide);
+  }
+  function onActivity(e) {
+    // 指针事件：坐标真实移动（≥2px）才算活动；坐标不变的“伪 mousemove”不刷新空闲计时
+    if (e && typeof e.clientX === 'number' && typeof e.clientY === 'number') {
+      const dx = e.clientX - S.lastX, dy = e.clientY - S.lastY;
+      if (S.lastX >= 0 && dx * dx + dy * dy < 4) return;
+      S.lastX = e.clientX; S.lastY = e.clientY;
+    }
+    S.lastActive = Date.now();
+    setAutohide();
+  }
+
   // ================= 工具 =================
   function isVideoPage() { return /^\/video\//.test(location.pathname); }
   function getBvid() {
@@ -129,6 +197,11 @@
       #bili-sub-sync{position:fixed;left:50%;bottom:10%;transform:translateX(-50%);max-width:70%;z-index:2147483647;
         background:rgba(0,0,0,.72);color:#fff;font-size:20px;line-height:1.5;padding:8px 16px;border-radius:8px;
         text-align:center;pointer-events:none;display:none;font-family:"Microsoft YaHei","PingFang SC",sans-serif}
+      #bili-sub-pill,#bili-sub-panel{transition:opacity .25s ease,visibility .25s ease}
+      #bili-sub-pill.bili-sub-hidden,#bili-sub-panel.bili-sub-hidden{opacity:0;visibility:hidden;pointer-events:none}
+      /* 全屏时整体上移，避开底部进度条/控制条（窗口模式保持原位置） */
+      html.bili-sub-fs #bili-sub-pill{bottom:100px}
+      html.bili-sub-fs #bili-sub-panel{bottom:158px}
     `;
     (document.head || document.documentElement).appendChild(css);
 
@@ -151,7 +224,12 @@
     overlayEl.id = 'bili-sub-sync';
 
     document.addEventListener('fullscreenchange', anchorAll);
+    document.addEventListener('fullscreenchange', () => { S.lastActive = Date.now(); setAutohide(); });
+    for (const ev of ['mousemove', 'pointerdown', 'keydown', 'wheel', 'touchstart']) {
+      document.addEventListener(ev, onActivity, { passive: true });
+    }
     setInterval(anchorAll, 1000);
+    setInterval(setAutohide, 500);
     anchorAll();
   }
 

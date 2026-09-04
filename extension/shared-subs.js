@@ -48,6 +48,19 @@
     return (res >= 0 && t < segs[res].end) ? res : -1;
   };
 
+  // 全屏自动隐藏判定：仅当「播放中 + 处于任一全屏 + 空闲时长 ≥ 阈值」时返回 true
+  // （普通窗口、暂停/未播放、尚未静置足够久时一律返回 false，绝不误隐藏）
+  // 参数: { playing, inFullscreen, idleMs, thresholdMs?=3000 }，全部显式传入
+  API.controlsAutoHide = function (opts) {
+    const o = opts || {};
+    if (o.playing !== true || o.inFullscreen !== true) return false;
+    const idle = Number(o.idleMs);
+    if (!Number.isFinite(idle) || idle < 0) return false;
+    const thr = Number(o.thresholdMs);
+    const threshold = Number.isFinite(thr) && thr >= 0 ? thr : 3000;
+    return idle >= threshold;
+  };
+
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else root.BiliSubs = API;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
