@@ -78,24 +78,17 @@ t('segAt: 空输入', () => {
   assert.strictEqual(B.segAt(null, 1), -1);
 });
 
-// ---------- controlsAutoHide（全屏自动隐藏判定）----------
-t('controlsAutoHide: 仅「播放中 + 任一全屏 + 空闲≥阈值」才隐藏', () => {
-  const s = { playing: true, inFullscreen: true, idleMs: 3000 };
-  assert.strictEqual(B.controlsAutoHide(s), true);          // 临界 3000 命中
-  assert.strictEqual(B.controlsAutoHide({ ...s, idleMs: 2999 }), false);
-  assert.strictEqual(B.controlsAutoHide({ ...s, idleMs: 5000 }), true);
-  assert.strictEqual(B.controlsAutoHide({ ...s, inFullscreen: false }), false); // 窗口模式永不隐藏
-  assert.strictEqual(B.controlsAutoHide({ ...s, playing: false }), false);      // 暂停不隐藏
+// ---------- controlsAutoHide（全屏按钮隐藏判定：方案A = 播放中永不显示） ----------
+t('controlsAutoHide: 全屏且播放中即隐藏（与空闲时长/鼠标活动无关）', () => {
+  assert.strictEqual(B.controlsAutoHide({ playing: true, inFullscreen: true }), true);
+  assert.strictEqual(B.controlsAutoHide({ playing: true, inFullscreen: true, idleMs: 0 }), true);
+  assert.strictEqual(B.controlsAutoHide({ playing: true, inFullscreen: true, idleMs: 99999 }), true);
 });
-t('controlsAutoHide: 默认阈值 3000ms，可自定义 thresholdMs', () => {
-  assert.strictEqual(B.controlsAutoHide({ playing: true, inFullscreen: true, idleMs: 1500 }), false);
-  assert.strictEqual(B.controlsAutoHide({ playing: true, inFullscreen: true, idleMs: 1500, thresholdMs: 1000 }), true);
-  assert.strictEqual(B.controlsAutoHide({ playing: true, inFullscreen: true, idleMs: 1500, thresholdMs: 5000 }), false);
-});
-t('controlsAutoHide: 缺省/非法输入一律不隐藏（保守）', () => {
+t('controlsAutoHide: 非全屏或未播放一律不隐藏', () => {
+  assert.strictEqual(B.controlsAutoHide({ playing: true, inFullscreen: false }), false); // 窗口模式
+  assert.strictEqual(B.controlsAutoHide({ playing: false, inFullscreen: true }), false); // 暂停时显示按钮
+  assert.strictEqual(B.controlsAutoHide({ playing: false, inFullscreen: false }), false);
   assert.strictEqual(B.controlsAutoHide({}), false);
-  assert.strictEqual(B.controlsAutoHide({ playing: true, inFullscreen: true }), false); // 无 idleMs = 未空闲
-  assert.strictEqual(B.controlsAutoHide({ playing: true, inFullscreen: true, idleMs: NaN }), false);
   assert.strictEqual(B.controlsAutoHide(null), false);
 });
 

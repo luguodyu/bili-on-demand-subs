@@ -20,11 +20,7 @@
 
   let pillEl = null, panelEl = null, overlayEl = null;
 
-  // ================= 全屏自动隐藏（网页全屏 / 电脑全屏） =================
-  S.lastActive = Date.now(); // 最近一次用户活动时间
-  S.lastX = -1; S.lastY = -1; // 上一次指针坐标（用于识别“原地重复”的伪移动事件）
-  const FS_HIDE_MS = 800;     // 全屏下静置多久隐藏（越快越好；鼠标真实移动会重置）
-
+  // ================= 全屏按钮策略（方案A：播放中永不显示，暂停/制作中才显示） =================
   // 全屏判定：Fullscreen API（电脑全屏/播放器全屏）或 B站「网页全屏」的 fixed 全屏容器
   function inAnyFullscreen() {
     try { if (document.fullscreenElement) return true; } catch (e) {}
@@ -68,24 +64,13 @@
     if (!pillEl) return;
     const fs = inAnyFullscreen();
     if (document.documentElement) document.documentElement.classList.toggle('bili-sub-fs', fs);
+    // 方案A：全屏+播放中直接隐藏（不等鼠标空闲）；暂停/制作中/S.busy 时保持可见
     const hide = !S.busy && BiliSubs.controlsAutoHide({
       playing: anyPlaying(),
-      inFullscreen: fs,
-      idleMs: Date.now() - S.lastActive,
-      thresholdMs: FS_HIDE_MS
+      inFullscreen: fs
     });
     pillEl.classList.toggle('bili-sub-hidden', hide);
     if (panelEl) panelEl.classList.toggle('bili-sub-hidden', hide);
-  }
-  function onActivity(e) {
-    // 指针事件：坐标真实移动（≥2px）才算活动；坐标不变的“伪 mousemove”不刷新空闲计时
-    if (e && typeof e.clientX === 'number' && typeof e.clientY === 'number') {
-      const dx = e.clientX - S.lastX, dy = e.clientY - S.lastY;
-      if (S.lastX >= 0 && dx * dx + dy * dy < 4) return;
-      S.lastX = e.clientX; S.lastY = e.clientY;
-    }
-    S.lastActive = Date.now();
-    setAutohide();
   }
 
   // ================= 工具 =================
@@ -224,10 +209,6 @@
     overlayEl.id = 'bili-sub-sync';
 
     document.addEventListener('fullscreenchange', anchorAll);
-    document.addEventListener('fullscreenchange', () => { S.lastActive = Date.now(); setAutohide(); });
-    for (const ev of ['mousemove', 'pointerdown', 'keydown', 'wheel', 'touchstart']) {
-      document.addEventListener(ev, onActivity, { passive: true });
-    }
     setInterval(anchorAll, 1000);
     setInterval(setAutohide, 500);
     anchorAll();
