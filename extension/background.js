@@ -36,6 +36,48 @@ function stopKeepalive() {
   if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
 }
 
+// ===== 本地字幕服务自动拉起（v0.5：Native Messaging 原生宿主）=====
+const SERVER_HEALTH = 'http://127.0.0.1:8765/health';
+const HOST_NAME = 'com.dsh.bilisub_server';
+let hostPort = null;
+let hostUnavailable = false; // 未安装原生宿主时不再反复尝试
+
+async function serverUp() {
+  try {
+    const r = await fetch(SERVER_HEALTH, { cache: 'no-store' });
+    return r.ok;
+  } catch (e) { return false; }
+}
+
+function openHost() {
+  try {
+    if (hostPort) return hostPort;
+    hostPort = chrome.runtime.connectNative(HOST_NAME);
+    hostPort.onDisconnect.addListener(() => { hostPort = null; });
+    hostPort.onMessage.addListener(() => {}); // 回包仅作保活，就绪与否以 /health 为准
+    return hostPort;
+  } catch (e) {
+    hostUnavailable = true;
+    return null;
+  }
+}
+
+// 确保本地服务已就绪：已起则秒回；否则让原生宿主拉起并轮询 /health（最长 45s=模型加载）。
+// 就绪后端口保持打开、宿主随之存活；浏览器/Service Worker 关闭时宿主退出并自动停服务。
+async function ensureServer(timeoutMs = 45000) {
+  if (await serverUp()) return true;
+  if (hostUnavailable) return false;
+  const port = openHost();
+  if (!port) return false;
+  port.postMessage({ type: 'start' });
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    if (await serverUp()) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg !== 'object') return;
 
@@ -46,9 +88,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         job = { tabId, cid: msg.cid };
         startKeepalive();
       }
-      // 内容脚本广播的消息离屏页可能已直接收到；这里兜底：确保离屏页存在并再送一次（离屏页按 cid 去重）
-      ensureOffscreen()
-        .then(() => chrome.runtime.sendMessage(msg).catch(() => {}))
+      // 先确保本地服务就绪（拉起需一次性安装原生宿主）；失败则离屏页自动走浏览器识别回退
+      ensureServer().then((up) => {
+        if (!up) console.warn('本地字幕服务未就绪，本次将用浏览器内置识别（较慢）');
+        return ensureOffscreen();
+      }).then(() => chrome.runtime.sendMessage(msg).catch(() => {}))
         .catch((e) => console.error('离屏页启动失败:', e));
       sendResponse({ ok: true });
       return true;

@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "B站按需字幕",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "B站按需字幕插件：无字幕视频一键生成字幕文件，播放时自动同步显示，字幕库持久化管理",
-  "permissions": ["offscreen", "storage", "unlimitedStorage", "downloads"],
+  "permissions": ["offscreen", "storage", "unlimitedStorage", "downloads", "nativeMessaging"],
   "host_permissions": [
     "https://*.bilibili.com/*",
     "https://*.bilivideo.com/*",
     "https://*.bilivideo.cn/*",
-    "https://*.mcdn.bilivideo.cn/*"
+    "https://*.mcdn.bilivideo.cn/*",
+    "http://127.0.0.1/*"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"

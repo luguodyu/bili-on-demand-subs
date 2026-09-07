@@ -31,6 +31,7 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = "B站字幕服务-便携版"
+VERSION = "0.5.0"
 DEFAULT_ENV = r"C:\Users\86150\.conda\envs\bilibili_subtitle"
 
 try:
@@ -197,36 +198,97 @@ def write_launchers(build_root):
         )
 
 
-def write_readme(build_root, size_est):
+def write_native_host_files(build_root):
+    """编译 native host 启动器并写入安装/卸载脚本（浏览器自动拉起模式）。"""
+    src_cs = os.path.join(ROOT, "tools", "native_host.cs")
+    exe = os.path.join(build_root, "subtitle-native.exe")
+    csc_cands = [
+        os.path.join(os.environ.get("WINDIR", r"C:\Windows"), r"Microsoft.NET\Framework64\v4.0.30319\csc.exe"),
+        os.path.join(os.environ.get("WINDIR", r"C:\Windows"), r"Microsoft.NET\Framework\v4.0.30319\csc.exe"),
+    ]
+    csc = next((c for c in csc_cands if os.path.isfile(c)), None)
+    if csc is None:
+        raise RuntimeError("找不到 csc.exe（.NET Framework 编译器），无法构建 native host")
+    r = subprocess.run([csc, "/nologo", "/out:" + exe, src_cs])
+    if r.returncode != 0 or not os.path.isfile(exe):
+        raise RuntimeError("native host 编译失败")
+    log("  native host: %s (%s)" % (os.path.basename(exe), fmt_mb(os.path.getsize(exe))))
+
+    with open(os.path.join(build_root, "安装-浏览器自动拉起.bat"), "w", encoding="utf-8") as f:
+        f.write(
+            "@echo off\r\n"
+            "chcp 65001 >nul\r\n"
+            "title B站字幕服务 - 安装\u201c浏览器自动拉起\u201d（一次性）\r\n"
+            'cd /d "%~dp0"\r\n'
+            "echo ================================================================\r\n"
+            "echo  让插件自动拉起本地服务（原生宿主注册，一次性）\r\n"
+            "echo ================================================================\r\n"
+            "echo.\r\n"
+            "echo 前置：在 chrome://extensions 打开「开发者模式」加载 extension 文件夹后，\r\n"
+            "echo 复制插件卡片上的 ID（32 位小写字母）备用。\r\n"
+            "set /p EXT_ID=插件 ID：\r\n"
+            'if "%EXT_ID%"=="" ( echo 未输入 ID，已退出。 & pause & exit /b 1 )\r\n'
+            "set /p BR=浏览器（Chrome 按 1 / Edge 按 2，默认 1）：\r\n"
+            'if "%BR%"=="2" (set HOST_KEY=HKCU\\Software\\Microsoft\\Edge\\NativeMessagingHosts\\com.dsh.bilisub_server) else (set HOST_KEY=HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.dsh.bilisub_server)\r\n'
+            'set "EXE=%~dp0subtitle-native.exe"\r\n'
+            'set "EXEJS=%EXE:\\=/%"\r\n'
+            'echo {"name":"com.dsh.bilisub_server","description":"B站字幕服务启动器","path":"%EXEJS%","type":"stdio","allowed_origins":["chrome-extension://%EXT_ID%/"]} > "%~dp0native-manifest.json"\r\n'
+            'reg add "%HOST_KEY%" /ve /d "%~dp0native-manifest.json" /f >nul\r\n'
+            "echo.\r\n"
+            "echo 安装完成。以后在 B 站视频页点「生成字幕」会自动拉起本服务；\r\n"
+            "echo 首次需等模型加载约 10~20 秒。若移动了文件夹，重新运行本脚本即可。\r\n"
+            "pause\r\n"
+        )
+    with open(os.path.join(build_root, "卸载-浏览器自动拉起.bat"), "w", encoding="utf-8") as f:
+        f.write(
+            "@echo off\r\n"
+            "chcp 65001 >nul\r\n"
+            "reg delete \"HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.dsh.bilisub_server\" /f >nul 2>&1\r\n"
+            "reg delete \"HKCU\\Software\\Microsoft\\Edge\\NativeMessagingHosts\\com.dsh.bilisub_server\" /f >nul 2>&1\r\n"
+            'if exist "%~dp0native-manifest.json" del "%~dp0native-manifest.json"\r\n'
+            "echo 已移除自动拉起的注册。服务仍可手动双击「启动字幕服务.bat」使用。\r\n"
+            "pause\r\n"
+        )
+
+
+def write_readme(build_root, size_est, ver):
     with open(os.path.join(build_root, "使用说明.md"), "w", encoding="utf-8") as f:
         f.write(
-            "# B站字幕生成插件 · 便携版字幕服务（v0.4.1）\n\n"
-            "本文件夹是「本地字幕识别服务」的绿色便携版：内置 Python 引擎与 faster-whisper-small 模型，"
-            "**不需要安装 Python**，解压即可用。\n\n"
-            "## 使用方法\n\n"
-            "1. 把整个文件夹解压到任意位置（建议英文/数字路径，如 `D:\\tools\\bili-sub-server`）；\n"
-            "2. **双击 `启动字幕服务.bat`**（想无黑窗口则双击 `启动字幕服务-静默.vbs`）；\n"
-            "3. 等待命令行出现 `Running on http://127.0.0.1:8765`（模型加载约 10~20 秒）；\n"
-            "4. 在浏览器里正常使用「B站按需字幕」插件，自动连接本服务；\n"
-            "5. 不需要时：关闭启动窗口即停止（静默版用任务管理器结束 python 进程）。\n\n"
+            "# B站字幕生成插件 · 便携版字幕服务（v%s）\n\n" % ver
+            + "本文件夹是「本地字幕识别服务」的绿色便携版：内置 Python 引擎与 faster-whisper-small 模型，"
+            "**不需要安装 Python**，解压即可用。配套插件版本 0.5.0+。\n\n"
+            "## 方式一（推荐）：浏览器自动拉起，装一次永久免手动\n\n"
+            "1. 在 `chrome://extensions` 打开「开发者模式」→「加载已解压的扩展程序」→ 选插件 `extension` 文件夹，"
+            "复制插件 ID（32 位小写字母）；\n"
+            "2. 双击 `安装-浏览器自动拉起.bat`，粘贴插件 ID 并选浏览器（Chrome/Edge），回车完成注册（一次性）；\n"
+            "3. 之后在 B 站视频页点「生成字幕」：插件会自动启动本服务（首次含模型加载约 10~20 秒），"
+            "浏览器关闭时服务自动退出、不占内存；\n"
+            "4. 移动了整个文件夹？重新双击一次安装脚本即可（指向新位置）；不想要了双击 `卸载-浏览器自动拉起.bat`。\n\n"
+            "## 方式二：手动启动（免注册的兜底）\n\n"
+            "1. 双击 `启动字幕服务.bat`（无黑窗口用 `启动字幕服务-静默.vbs`）；\n"
+            "2. 等待命令行出现 `Running on http://127.0.0.1:8765`（模型加载约 10~20 秒）；\n"
+            "3. 浏览器里正常使用插件；不需要时关闭窗口即停止。\n\n"
             "## 技术信息\n\n"
             "- 系统要求：仅支持 **64 位 Windows 10/11**（无需安装 Python/任何运行库）\n"
             "- 内置 Python 3.10 + 依赖（faster-whisper 1.2.1 / ctranslate2 4.8.2 / onnxruntime / av / flask 等，"
             "与开发环境同版本）\n"
             "- 模型：faster-whisper-small（int8，CPU）；接口 /health 返回 version=2\n"
+            "- 自动拉起基于 Chrome/Edge Native Messaging 原生宿主（`subtitle-native.exe`），注册仅写当前用户注册表，"
+            "不需要管理员权限\n"
             "- 服务只监听本机 127.0.0.1:8765，不对外网开放\n\n"
             "## 常见问题\n\n"
+            "- **插件一直走慢速识别（提示服务未就绪）**：确认已运行安装脚本并填对插件 ID；或先手动方式二启动验证。\n"
             "- **端口被占用**：先关闭旧服务窗口（或任务管理器结束 python），再启动。\n"
             "- **杀毒/系统拦截**：首次运行如被提示，选择“仍要运行”；一切文件均在本地，不上传数据。\n"
             "- **插件提示“本地服务版本过旧”**：确认启动的是本文件夹内的服务并看到 version=2。\n"
-            "- **移动/删除**：绿色版无安装痕迹，删整个文件夹即卸载。\n\n"
+            "- **移动/删除**：绿色版无安装痕迹，先运行卸载脚本，再删整个文件夹即卸载。\n\n"
             "构建信息：解压后整体约 %s。\n" % size_est
         )
 
 
-def make_zip(build_root, dist_dir):
+def make_zip(build_root, dist_dir, ver):
     os.makedirs(dist_dir, exist_ok=True)
-    zip_path = os.path.join(dist_dir, "%s-v0.4.1.zip" % APP)
+    zip_path = os.path.join(dist_dir, "%s-v%s.zip" % (APP, ver))
     log("打包 -> %s" % zip_path)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for root, dirs, files in os.walk(build_root):
@@ -265,7 +327,7 @@ def main():
                     removed += 1
         log("  清理条目: %d" % removed)
         log("== 重新打包 zip ==")
-        zip_path = make_zip(build_root, os.path.join(ROOT, "dist"))
+        zip_path = make_zip(build_root, os.path.join(ROOT, "dist"), VERSION)
         log("  zip 文件: %s (%s)" % (zip_path, fmt_mb(os.path.getsize(zip_path))))
         log("DONE")
         return
@@ -297,7 +359,8 @@ def main():
     for wav in glob.glob(os.path.join(ROOT, "clip*.wav")):
         shutil.copy2(wav, os.path.join(build_root, os.path.basename(wav)))
     write_launchers(build_root)
-    write_readme(build_root, fmt_mb(sizes["engine"] + sizes["model"]))
+    write_native_host_files(build_root)
+    write_readme(build_root, fmt_mb(sizes["engine"] + sizes["model"]), VERSION)
 
     log("== 导入冒烟（engine python） ==")
     r = subprocess.run([engine_py, "-c",
@@ -315,7 +378,7 @@ def main():
         log("（已跳过 P2 自检）")
 
     log("== P3 打包 zip ==")
-    zip_path = make_zip(build_root, os.path.join(ROOT, "dist"))
+    zip_path = make_zip(build_root, os.path.join(ROOT, "dist"), VERSION)
     log("---- 体积汇总 ----")
     log("  engine(含依赖): %s" % fmt_mb(sizes["engine"]))
     log("  模型:           %s" % fmt_mb(sizes["model"]))
