@@ -18,3 +18,7 @@ Desktop.ini
 
 # 会话恢复备份（.recovery/ 下的文件为恢复用副本，不入库）
 .recovery/
+
+# 便携打包产物（可随时重新生成）
+build_portable/
+dist/

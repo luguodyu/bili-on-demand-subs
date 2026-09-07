@@ -39,13 +39,14 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def find_local_model():
-    """优先使用项目内已下载的 faster-whisper-small 快照目录"""
-    pattern = os.path.join(
-        BASE_DIR, "hf-cache", "hub", "models--Systran--faster-whisper-*", "snapshots", "*"
-    )
-    cands = sorted(glob.glob(pattern))
-    if cands:
-        return cands[0]
+    """优先用便携包布局 models/（与脚本同级）；开发布局回退到项目内 hf-cache 快照"""
+    for base, pat in (
+        (BASE_DIR, os.path.join("models", "faster-whisper-*")),           # 便携版
+        (BASE_DIR, os.path.join("hf-cache", "hub", "models--Systran--faster-whisper-*", "snapshots", "*")),  # 开发版
+    ):
+        cands = sorted(glob.glob(os.path.join(base, pat)))
+        if cands:
+            return cands[0]
     return None
 
 
