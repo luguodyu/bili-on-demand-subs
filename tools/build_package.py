@@ -31,7 +31,7 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = "B站字幕服务-便携版"
-VERSION = "0.5.0"
+VERSION = "0.5.2"
 DEFAULT_ENV = r"C:\Users\86150\.conda\envs\bilibili_subtitle"
 
 try:

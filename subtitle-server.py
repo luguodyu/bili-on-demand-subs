@@ -16,6 +16,7 @@ import time
 import json
 import tempfile
 import subprocess
+import threading
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -27,13 +28,16 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from flask import Flask, request, jsonify
 from faster_whisper import WhisperModel
+from faster_whisper.audio import decode_audio
 from opencc import OpenCC
 
 app = Flask(__name__)
 app.json.ensure_ascii = False  # 中文直接显示，不转义
 
-# 实时进度（供浏览器轮询；单线程串行处理，无并发问题）
+# 实时进度（供浏览器轮询）
 PROGRESS = {"end": 0.0, "duration": 0.0, "ts": 0.0}
+# 转写串行锁：避免多任务并发污染全局 PROGRESS（threaded=True 只用于并发响应 /progress）
+TRANSCRIBE_LOCK = threading.Lock()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -154,26 +158,32 @@ def transcribe_url():
         if not tmp:
             return jsonify({"error": "download failed (all urls)"}), 502
 
-        PROGRESS.update({"end": 0.0, "duration": 0.0, "ts": time.time()})
-        segments, info = model.transcribe(
-            tmp,
-            language="zh",
-            vad_filter=True,
-            word_timestamps=True,
-            beam_size=1,
-            initial_prompt=DEFAULT_PROMPT,
-        )
-        duration = float(getattr(info, "duration", 0) or 0)
-        PROGRESS["duration"] = duration
+        # 统一解码为 16k float32 数组再转写（duration 精确可知、避免"文件+VAD"路径的线程异常）
+        # 注：decode_audio 已返回归一化 float32，勿再除以 32768
+        samples = decode_audio(tmp)
+        duration = float(len(samples)) / 16000.0
+        PROGRESS.update({"end": 0.0, "duration": duration, "ts": time.time()})
         out = []
-        for seg in segments:
-            text = cc.convert((seg.text or "").strip())
-            if text:
-                out.append({"start": round(float(seg.start), 2), "end": round(float(seg.end), 2), "text": text})
-            if duration > 0:
-                PROGRESS.update({"end": float(getattr(seg, "end", 0) or 0), "ts": time.time()})
-        PROGRESS["end"] = duration
-        return jsonify({"segments": out, "language": getattr(info, "language", None)})
+        language = None
+        with TRANSCRIBE_LOCK:
+            segments, info = model.transcribe(
+                samples,
+                language="zh",
+                vad_filter=True,
+                beam_size=1,
+                initial_prompt=DEFAULT_PROMPT,
+            )
+            language = getattr(info, "language", None)
+            for seg in segments:
+                text = cc.convert((seg.text or "").strip())
+                if text:
+                    out.append({"start": round(float(seg.start), 2), "end": round(float(seg.end), 2), "text": text})
+                # 进度：封顶在 duration 内、只增不减
+                seg_end = min(float(getattr(seg, "end", 0) or 0), duration)
+                if seg_end > PROGRESS["end"]:
+                    PROGRESS.update({"end": seg_end, "ts": time.time()})
+            PROGRESS["end"] = duration
+        return jsonify({"segments": out, "language": language})
     finally:
         if tmp and os.path.exists(tmp):
             try:
@@ -193,26 +203,28 @@ def transcribe_full():
     import numpy as np
 
     samples = np.frombuffer(data, dtype=np.float32).copy()
-
-    segments, info = model.transcribe(
-        samples,
-        language="zh",
-        vad_filter=True,
-        word_timestamps=True,
-        beam_size=1,
-        initial_prompt=DEFAULT_PROMPT,
-    )
-    # 实时进度：duration 取实际（缺失则按采样数估算），end 随分段流式更新
-    duration = float(getattr(info, "duration", 0) or (len(samples) / 16000.0))
+    duration = float(len(samples)) / 16000.0
     PROGRESS.update({"end": 0.0, "duration": duration, "ts": time.time()})
     out = []
-    for seg in segments:
-        text = cc.convert((seg.text or "").strip())
-        if text:
-            out.append({"start": round(float(seg.start), 2), "end": round(float(seg.end), 2), "text": text})
-        PROGRESS.update({"end": float(getattr(seg, "end", 0) or 0), "ts": time.time()})
-    PROGRESS["end"] = duration
-    return jsonify({"segments": out, "language": info.language})
+    language = None
+    with TRANSCRIBE_LOCK:
+        segments, info = model.transcribe(
+            samples,
+            language="zh",
+            vad_filter=True,
+            beam_size=1,
+            initial_prompt=DEFAULT_PROMPT,
+        )
+        language = getattr(info, "language", None)
+        for seg in segments:
+            text = cc.convert((seg.text or "").strip())
+            if text:
+                out.append({"start": round(float(seg.start), 2), "end": round(float(seg.end), 2), "text": text})
+            seg_end = min(float(getattr(seg, "end", 0) or 0), duration)
+            if seg_end > PROGRESS["end"]:
+                PROGRESS.update({"end": seg_end, "ts": time.time()})
+        PROGRESS["end"] = duration
+    return jsonify({"segments": out, "language": language})
 
 
 def convert_to_wav(src_path, dst_path):

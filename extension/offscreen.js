@@ -70,6 +70,7 @@ async function transcribeServer(urls) {
   if (batch) batch.ctrl = ctrl;
   const capTimer = setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, 60 * 60 * 1000);
   const t0 = Date.now();
+  let peakPct = 0; // 进度只增不减：服务端 duration 短暂为 0/上一任务残留时避免进度回退
   // 轮询服务端真实进度
   const poll = setInterval(async () => {
     try {
@@ -78,9 +79,12 @@ async function transcribeServer(urls) {
       const j = await r.json();
       if (j && j.duration > 0 && j.ts > 0) {
         const p = Math.min(0.9, (j.end || 0) / j.duration);
-        prog(15 + p * 75, '本地识别中…'); // 百分比以进度条数值为准（与 pct 同源）
+        if (p > peakPct) peakPct = p;
+        prog(15 + peakPct * 75, '本地识别中…'); // 百分比以进度条数值为准（与 pct 同源）
       } else {
-        prog(Math.min(12, 6 + (Date.now() - t0) / 1000 * 0.4), '服务端下载音频中…');
+        const ramp = Math.min(12, 6 + (Date.now() - t0) / 1000 * 0.4);
+        if (ramp > peakPct) peakPct = ramp;
+        prog(peakPct, '服务端下载音频中…');
       }
     } catch (e) {}
   }, 2000);
