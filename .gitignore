@@ -22,3 +22,15 @@ Desktop.ini
 # 便携打包产物（可随时重新生成）
 build_portable/
 dist/
+
+# 本地私密/开发杂项（不入库；保留本机工作流，公开仓库不应包含）
+项目复盘记录.md
+experiments/
+demo_stream.py
+transcribe.py
+启动字幕服务.bat
+启动字幕服务.vbs
+
+# 第三方 vendored 二进制（约 23MB，不入库；克隆后运行 tools/fetch_vendor.py 获取）
+extension/transformers.js
+extension/ort/
