@@ -233,6 +233,25 @@
   }
 
   // ================= 状态与渲染 =================
+  // 进度值护栏：上游任何越界值（历史上出现过 525%）都不会被交给渲染层。
+  // 根因已在服务端修掉，这里是第二道防线，保证界面永远只显示 0~100。
+  function clampPct(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 0;
+    return Math.min(100, Math.max(0, n));
+  }
+
+  // 视频总时长（秒）。传给本地服务用于在「下载整片音频」阶段就能报进度，
+  // 否则长视频下载期间进度条只能钉在 15% 不动。
+  function videoDuration() {
+    try {
+      const v = document.querySelector('video');
+      const d = v && Number(v.duration);
+      if (Number.isFinite(d) && d > 0) return d;
+    } catch (e) {}
+    return 0;
+  }
+
   function setPillState() {
     if (!pillEl) return;
     pillEl.classList.remove('st-ok', 'st-busy', 'st-none');
@@ -313,7 +332,7 @@
     try {
       await chrome.runtime.sendMessage({
         type: 'makeSub', cid: S.cid, bvid: S.bvid, title: S.title,
-        pageUrl: location.href, audioUrls: urls
+        pageUrl: location.href, audioUrls: urls, duration: videoDuration()
       });
     } catch (e) {
       S.busy = false; S.stageText = '启动失败: ' + e.message;
@@ -413,7 +432,7 @@
     if (!msg || !S.cid) return;
     if (msg.type === 'makeProgress' && msg.cid === S.cid) {
       S.busy = true;
-      S.progress = msg.pct || 0;
+      S.progress = clampPct(msg.pct);
       S.stageText = msg.msg || '';
       setPillState();
       if (panelEl && panelEl.style.display === 'block') refreshPanel();

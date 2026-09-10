@@ -38,6 +38,30 @@ async function fetchWithTimeout(url, ms) {
   finally { clearTimeout(t); }
 }
 
+// 把异常打印成可诊断的文本：DOMException 直接 console.error 只会得到 "[object DOMException]"
+function describeError(e) {
+  if (!e) return String(e);
+  const name = e.name || '';
+  const msg = e.message || '';
+  const code = (e.code !== undefined) ? (' code=' + e.code) : '';
+  const stack = e.stack ? ('\n' + e.stack) : '';
+  return (name ? name + ': ' : '') + msg + code + stack;
+}
+
+// 告知服务端放弃当前任务。
+// 服务端不会因为 HTTP 连接被 abort 而自动停止（它读不到断连），所以必须在 abort 前显式通知，
+// 否则转写会在后台跑完整片：空烧 CPU、占着转写锁、并让下一次任务的进度污染。
+// 刻意不传 signal：请求应当在 ctrl.abort() 之后依然发得出去。
+function notifyServerCancel() {
+  try {
+    fetch(SERVER_BASE + '/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({})
+    }).catch(() => {});
+  } catch (e) {}
+}
+
 // ================= 存储（统一走后台：离屏页无 chrome.storage） =================
 function sendMsg(msg) {
   return new Promise((resolve) => {
@@ -56,7 +80,7 @@ async function storeSubViaBackground(rec) {
 }
 
 // ================= 快路径：本地服务（服务端自下载 + 识别） =================
-async function transcribeServer(urls) {
+async function transcribeServer(urls, duration) {
   const health = await fetchWithTimeout(SERVER_BASE + '/health', 1500).catch(() => null);
   if (!health || !health.ok) return null;
   const hj = await health.json().catch(() => ({}));
@@ -74,7 +98,7 @@ async function transcribeServer(urls) {
   // 轮询服务端真实进度
   const poll = setInterval(async () => {
     try {
-      if (batch && batch.cancelled) { try { ctrl.abort(); } catch (e) {} return; }
+      if (batch && batch.cancelled) { notifyServerCancel(); try { ctrl.abort(); } catch (e) {} return; }
       const r = await fetchWithTimeout(SERVER_BASE + '/progress', 2000);
       const j = await r.json();
       if (j && j.duration > 0 && j.ts > 0) {
@@ -93,11 +117,18 @@ async function transcribeServer(urls) {
     const resp = await fetch(SERVER_BASE + '/transcribe-url', {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ urls }),
+      body: JSON.stringify({ urls, duration: duration || 0 }),
       signal: ctrl.signal
     });
     if (!resp.ok) {
       const j = await resp.json().catch(() => ({}));
+      // 499 = 服务端已按我们的请求放弃该任务（或判定客户端已离开）。
+      // 这是"取消"应有的结果，不是失败：必须原样上抛，绝不能回退到浏览器识别路径。
+      if (resp.status === 499 || j.code === 'cancelled') {
+        const e = new Error('已取消');
+        e.cancelled = true;
+        throw e;
+      }
       throw new Error(j.error || ('本地服务返回 ' + resp.status));
     }
     const j = await resp.json();
@@ -216,9 +247,10 @@ async function runMakeJob(msg) {
     let segs = null;
     if (urls.length) {
       prog(3, '连接本地识别服务…');
-      try { segs = await transcribeServer(urls); } catch (e) {
-        if (e && e.stale) throw e; // 服务版本过旧：明确报错
-        console.error('服务端识别失败，回退浏览器:', e);
+      try { segs = await transcribeServer(urls, msg.duration); } catch (e) {
+        if (e && e.stale) throw e;      // 服务版本过旧：明确报错
+        if (e && e.cancelled) throw e;  // 用户取消：直接结束，不要回退
+        console.error('服务端识别失败，回退浏览器:', describeError(e));
       }
     }
     if (!segs) {
@@ -239,8 +271,8 @@ async function runMakeJob(msg) {
     prog(100, '完成');
     chrome.runtime.sendMessage({ type: 'makeDone', cid: msg.cid, ok: true }).catch(() => {});
   } catch (err) {
-    console.error('制作字幕失败:', err);
-    chrome.runtime.sendMessage({ type: 'makeDone', cid: msg.cid, ok: false, error: err.message || String(err) }).catch(() => {});
+    console.error('制作字幕失败:', describeError(err));
+    chrome.runtime.sendMessage({ type: 'makeDone', cid: msg.cid, ok: false, error: (err.name ? err.name + ': ' : '') + (err.message || String(err)) }).catch(() => {});
   } finally {
     batch = null;
   }
@@ -256,6 +288,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'cancelMake':
       if (batch && batch.cid === msg.cid) {
         batch.cancelled = true;
+        notifyServerCancel();   // 先通知，再断请求
         if (batch.ctrl) { try { batch.ctrl.abort(); } catch (e) {} }
       }
       return;
