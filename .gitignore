@@ -34,3 +34,13 @@ transcribe.py
 # 第三方 vendored 二进制（约 23MB，不入库；克隆后运行 tools/fetch_vendor.py 获取）
 extension/transformers.js
 extension/ort/
+
+# 开发布局下的自动拉起产物（本机专用，不入库）
+# engine 是指向 conda 环境 bilibili_subtitle 的目录 junction（约 471MB）；
+# subtitle-native.exe 由 tools/native_host.cs 编译得到；
+# native-manifest.json 含本机绝对路径，由注册脚本生成。
+engine/
+subtitle-native.exe
+native-manifest.json
+native-host-debug.log
+
