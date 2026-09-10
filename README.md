@@ -4,7 +4,7 @@
 
 Browser extension (Manifest V3) + optional local speech-recognition service. Open a Bilibili video that has no subtitles → click the **Subtitle** pill → subtitles are generated and stay in sync with playback automatically. Results are persisted, manageable, and exportable as `.srt`.
 
-**Status:** extension `v0.5.1` · portable local service `v0.5.2` · tested on 64-bit Windows 10/11 (service) + Chrome/Edge (extension).
+**Status:** extension `v0.5.2` · local service `API v3` · tested on 64-bit Windows 10/11 (service) + Chrome/Edge (extension).
 
 > Demo GIF / screenshots: see [`docs/demo.md`](docs/demo.md) for what to record and where to drop the files.
 

@@ -34,11 +34,14 @@ _STOP = threading.Event()
 
 
 def find_python(here):
-    """优先用便携包自带的 python.exe，保证和服务实际运行环境一致"""
+    """优先用便携包自带的 python.exe，保证和服务实际运行环境一致。
+
+    便携布局：<包根>/engine/python.exe（与 subtitle-server.py 同级）。
+    也接受把本脚本放进便携包目录里运行。
+    """
     candidates = [
         os.path.join(here, "engine", "python.exe"),
         os.path.join(here, "build_portable", "engine", "python.exe"),
-        r"D:\test\B站字幕服务-便携版-v0.5.2\B站字幕服务-便携版\engine\python.exe",
     ]
     for c in candidates:
         if os.path.isfile(c):

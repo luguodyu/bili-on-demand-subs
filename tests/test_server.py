@@ -141,7 +141,7 @@ def test_health():
     check("200", r.status_code == 200)
     j = r.get_json()
     check("status ok", j and j.get("status") == "ok")
-    check("version 2", j and j.get("version") == 2)
+    check("version 3", j and j.get("version") == 3)
     check("CORS *", r.headers.get("Access-Control-Allow-Origin") == "*")
 
 

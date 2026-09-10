@@ -272,7 +272,7 @@ def write_readme(build_root, size_est, ver):
             "- 系统要求：仅支持 **64 位 Windows 10/11**（无需安装 Python/任何运行库）\n"
             "- 内置 Python 3.10 + 依赖（faster-whisper 1.2.1 / ctranslate2 4.8.2 / onnxruntime / av / flask 等，"
             "与开发环境同版本）\n"
-            "- 模型：faster-whisper-small（int8，CPU）；接口 /health 返回 version=2\n"
+            "- 模型：faster-whisper-small（int8，CPU）；接口 /health 返回 version=3\n"
             "- 自动拉起基于 Chrome/Edge Native Messaging 原生宿主（`subtitle-native.exe`），注册仅写当前用户注册表，"
             "不需要管理员权限\n"
             "- 服务只监听本机 127.0.0.1:8765，不对外网开放\n\n"
@@ -280,7 +280,7 @@ def write_readme(build_root, size_est, ver):
             "- **插件一直走慢速识别（提示服务未就绪）**：确认已运行安装脚本并填对插件 ID；或先手动方式二启动验证。\n"
             "- **端口被占用**：先关闭旧服务窗口（或任务管理器结束 python），再启动。\n"
             "- **杀毒/系统拦截**：首次运行如被提示，选择“仍要运行”；一切文件均在本地，不上传数据。\n"
-            "- **插件提示“本地服务版本过旧”**：确认启动的是本文件夹内的服务并看到 version=2。\n"
+            "- **插件提示“本地服务版本过旧”**：确认启动的是本文件夹内的服务并看到 version=3。\n"
             "- **移动/删除**：绿色版无安装痕迹，先运行卸载脚本，再删整个文件夹即卸载。\n\n"
             "构建信息：解压后整体约 %s。\n" % size_est
         )

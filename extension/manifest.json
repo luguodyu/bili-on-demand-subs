@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "B站按需字幕",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "B站按需字幕插件：无字幕视频一键生成字幕文件，播放时自动同步显示，字幕库持久化管理",
   "permissions": ["offscreen", "storage", "unlimitedStorage", "downloads", "nativeMessaging"],
   "host_permissions": [

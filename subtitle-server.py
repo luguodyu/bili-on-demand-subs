@@ -35,6 +35,11 @@ from opencc import OpenCC
 app = Flask(__name__)
 app.json.ensure_ascii = False  # 中文直接显示，不转义
 
+# 接口版本：扩展用它判断服务端是否配套。
+# v3 起 /progress 增加 taskId、新增 /cancel、/transcribe-url 接受 duration。
+# 改动接口语义时务必递增，否则新旧组合会静默跑错版本（历史踩过这个坑）。
+SERVER_API_VERSION = 3
+
 # 客户端心跳超时：客户端一旦开始轮询 /progress，超过这个时长不再来读，
 # 即视为已放弃（浏览器崩溃/扩展被卸载/请求被 abort），当前转写会被放弃。
 # 只对「曾经轮询过」的任务生效，直接 curl 调用不受影响。
@@ -200,7 +205,7 @@ def add_cors(resp):
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "model": "small", "version": 2})
+    return jsonify({"status": "ok", "model": "small", "version": SERVER_API_VERSION})
 
 
 @app.route("/progress")

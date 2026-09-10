@@ -18,7 +18,7 @@ env.remoteHost = 'https://hf-mirror.com';
 env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL('ort/');
 
 const SERVER_BASE = 'http://127.0.0.1:8765';
-const SERVER_VERSION = 2;
+const SERVER_VERSION = 3;
 
 let batch = null;              // { cid, cancelled, ctrl }
 let asr = null;                // WASM whisper 管道（回退路径懒加载）
